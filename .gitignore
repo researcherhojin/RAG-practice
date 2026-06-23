@@ -17,8 +17,8 @@ chroma_db/
 outputs/
 .gstack/
 
-# 문서 내용·파일명이 담긴 산출물 (개인정보 보호 — git 제외)
-docs/images/
+# 문서 파일명이 담긴 평가 질문 (개인정보 보호 — git 제외)
+# 단, docs/images/ 스크린샷은 공개 샘플 문서 기준이라 커밋해 README 에 노출함.
 eval/questions.yaml
 
 # 추가 비밀/인증 파일 (방어용)
