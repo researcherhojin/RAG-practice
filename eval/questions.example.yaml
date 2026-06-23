@@ -1,0 +1,33 @@
+# 평가 질문 예시 템플릿
+#
+# 이 파일을 eval/questions.yaml 로 복사한 뒤 본인 문서에 맞게 채우세요.
+#   cp eval/questions.example.yaml eval/questions.yaml
+# 실제 questions.yaml 은 문서 파일명이 담길 수 있어 git 에서 제외됩니다(.gitignore).
+#
+# 각 질문 항목 구조: id / question / expected_source / note
+
+questions:
+  - id: q1
+    question: "여기에 평가용 질문을 적으세요."
+    expected_source: "검색 Top-K 에 들어와야 하는 문서 파일명.pdf"
+    note: "이 질문으로 무엇을 확인하려는지 메모"
+
+  - id: q2
+    question: ""
+    expected_source: ""
+    note: ""
+
+  - id: q3
+    question: ""
+    expected_source: ""
+    note: ""
+
+  - id: q4
+    question: ""
+    expected_source: ""
+    note: ""
+
+  - id: q5
+    question: ""
+    expected_source: ""
+    note: ""

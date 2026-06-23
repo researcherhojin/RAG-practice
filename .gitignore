@@ -1,0 +1,27 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# .env 추가
+.env
+
+# RAG 산출물 / Vector DB (GitHub 에 올리지 않음)
+chroma_db/
+outputs/
+.gstack/
+
+# 문서 내용·파일명이 담긴 산출물 (개인정보 보호 — git 제외)
+docs/images/
+eval/questions.yaml
+
+# 추가 비밀/인증 파일 (방어용)
+.env.*
+*.key
+*.pem
