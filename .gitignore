@@ -17,6 +17,9 @@ chroma_db/
 outputs/
 .gstack/
 
+# tiktoken 인코더 캐시 (한 번 받으면 재생성 가능 — git 제외)
+.tiktoken_cache/
+
 # 문서 파일명이 담긴 평가 질문 (개인정보 보호 — git 제외)
 # 단, docs/images/ 스크린샷은 공개 샘플 문서 기준이라 커밋해 README 에 노출함.
 eval/questions.yaml

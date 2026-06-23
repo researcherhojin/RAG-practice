@@ -32,8 +32,22 @@ DEFAULT_CHUNK_OVERLAP = 100
 ELIGIBLE_STATUS = {"Ready", "Partial"}
 
 # 토큰 수 계산에 쓰는 인코더 (분할 기준과 동일하게 o200k_base).
+# tiktoken 은 인코더 파일을 갖고 있지 않으면 실행 중에 인터넷에서 받는다.
+# 프로젝트 로컬 폴더에 한 번 받아두면 오프라인에서도 동작하고,
+# 네트워크가 끊겨도 인코더는 처음 쓸 때만 불러오므로 앱 자체는 켜진다.
 _ENCODING_NAME = "o200k_base"
-_encoder = tiktoken.get_encoding(_ENCODING_NAME)
+_CACHE_DIR = os.path.join(os.path.dirname(__file__), "..", ".tiktoken_cache")
+os.environ.setdefault("TIKTOKEN_CACHE_DIR", os.path.abspath(_CACHE_DIR))
+
+_encoder = None  # 처음 쓸 때 채운다 (lazy load)
+
+
+def _get_encoder():
+    """o200k_base 인코더를 처음 쓸 때 한 번만 불러와 재사용한다."""
+    global _encoder
+    if _encoder is None:
+        _encoder = tiktoken.get_encoding(_ENCODING_NAME)
+    return _encoder
 
 
 def chunk_documents(chunk_size=DEFAULT_CHUNK_SIZE,
@@ -85,7 +99,7 @@ def chunk_documents(chunk_size=DEFAULT_CHUNK_SIZE,
                 # Chunk 단위로 새로 추가하는 metadata
                 "chunk_id": f"{source}_p{page}_c{i}",
                 "chunk_index": i,
-                "token_count": len(_encoder.encode(piece)),
+                "token_count": len(_get_encoder().encode(piece)),
                 "char_count": len(piece),
                 "text": piece,
             })
