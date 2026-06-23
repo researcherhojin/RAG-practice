@@ -39,6 +39,8 @@
 ## Phase 2 — Ingestion / 형식 진단 (`rag/ingestion.py`)
 
 - **목표**: "이 문서가 텍스트화되는가" 진단 + 본문 추출.
+- 사이드바에서 **여러 파일을 한 번에 업로드** 가능. 파일별로 진단·추출하고,
+  같은 산출물에 누적한다(`ingestion_report.csv` append, `extracted_text.json` 은 `(source,page)` 단위 upsert).
 - 형식별 처리: PDF=`pymupdf4llm`(페이지별 Markdown), TXT=plain, DOCX=`python-docx`,
   HWP=변환 권장(warning), HWPX=zip XML best-effort, 이미지=OCR/Vision 필요(warning).
 - 짧은 PDF 페이지(<50자)는 `scanned=True` + warning.
@@ -56,6 +58,8 @@
 
 - **목표**: Ready·Partial 문서만 검색 가능한 Chunk 로 분할.
 - `RecursiveCharacterTextSplitter.from_tiktoken_encoder`(o200k_base) — **token 기준**.
+- 인코더는 첫 사용 시 `.tiktoken_cache/` 에 받아 캐시하고 lazy load 한다
+  (네트워크가 끊겨도 import 단계가 죽지 않고, 한 번 받으면 오프라인 동작).
 - `chunk_size` 400 / 800 / 1200 비교 가능(기본 800), `chunk_overlap` 100.
 - Chunk metadata 10종: source, file_type, parser_type, page, readiness_status,
   warning, chunk_id, chunk_index, token_count, char_count.
@@ -85,7 +89,8 @@
 
 - **관심사 분리**: 기능 로직은 `rag/*.py`(Streamlit 비의존), `app.py` 는 화면/버튼만.
 - **단계별 산출물**: 각 Phase 가 파일로 결과를 남겨 다음 Phase 입력이 됨 (재현·디버깅 용이).
-- **세션 캐시**: Streamlit 재실행 대비 `session_state` 로 재파싱·중복 저장 방지.
+- **세션 캐시**: Streamlit 재실행 대비 `session_state` 로 **파일별** 재파싱·중복 저장 방지
+  (이미 처리한 파일은 file_id 로 건너뜀 — 여러 파일을 올려도 같은 행이 두 번 쌓이지 않음).
 - **보안**: API Key 는 `.env` 만, `chroma_db/`·`outputs/`·`.env` 는 Git 제외,
   검색 Context 는 데이터로만 취급.
 - **다음 단계 (미구현)**: 검색 결과 기반 RAG 답변 생성 + Source Citation.

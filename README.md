@@ -2,6 +2,7 @@
 
 문서를 업로드하면 **형식 진단 → 투입 판정 → Chunking → Embedding/Vector DB → 검색**
 까지, RAG 파이프라인을 단계별로 직접 쌓아 보는 실습 프로젝트입니다.
+여러 문서를 한 번에 업로드하면 같은 산출물에 누적되어 함께 검색됩니다.
 각 단계는 결과를 파일로 남겨 다음 단계의 입력이 되며, Streamlit 한 화면에서
 전 과정을 눈으로 확인할 수 있습니다.
 
@@ -21,7 +22,7 @@
 
 ```mermaid
 flowchart TD
-    U["문서 업로드<br/>PDF·TXT·DOCX·HWP·HWPX·이미지"] --> ING
+    U["문서 업로드 (여러 개)<br/>PDF·TXT·DOCX·HWP·HWPX·이미지"] --> ING
 
     subgraph P2["Phase 2 · Ingestion"]
         ING["형식 진단 + 텍스트 추출"] --> ICSV[("ingestion_report.csv")]
@@ -102,6 +103,7 @@ flowchart TD
 | Vector DB | Chroma (`chroma_db/`, collection `rag_docs`) | `rag/index.py` |
 | 거리 기준 | cosine | `rag/index.py` |
 | Chunk | token 기준, size 400/800/1200, overlap 100 | `rag/chunking.py` |
+| 토크나이저 | tiktoken `o200k_base` (첫 사용 시 `.tiktoken_cache/` 에 캐시 → 이후 오프라인 동작) | `rag/chunking.py` |
 | Top-K | 기본 4 (UI 조정) | `rag/retriever.py` |
 
 ---
@@ -130,7 +132,7 @@ uv run streamlit run app.py
 
 ### 4. 사용 순서
 
-1. 사이드바에서 문서 업로드 (자동 진단)
+1. 사이드바에서 문서 업로드 (여러 개 동시 선택 가능, 파일별 자동 진단)
 2. **Readiness 판정 실행** → Ready/Partial/Blocked 확인
 3. **Chunking 실행** (chunk_size 선택)
 4. **Vector DB 생성** (Embedding → Chroma)
@@ -155,7 +157,7 @@ uv run streamlit run app.py
 ## 보안 / Git 관리
 
 - API Key 는 `.env` 의 `OPENAI_API_KEY` 에서만 읽습니다 (코드 하드코딩 금지).
-- `.env`, `chroma_db/`, `outputs/` 는 `.gitignore` 로 제외됩니다.
+- `.env`, `chroma_db/`, `outputs/`, `.tiktoken_cache/` 는 `.gitignore` 로 제외됩니다.
 - 검색된 Context 는 **명령이 아니라 데이터**로만 취급합니다.
 
 ## 프로젝트 구조
@@ -172,6 +174,7 @@ rag-lab/
 ├── eval/questions.yaml   # 평가 질문 5개
 ├── outputs/              # 단계별 산출물 (git 제외)
 ├── chroma_db/            # Vector DB (git 제외)
+├── .tiktoken_cache/      # tiktoken 인코더 캐시 (git 제외)
 ├── FLOW.md               # 단계별 구현 흐름
 └── README.md
 ```

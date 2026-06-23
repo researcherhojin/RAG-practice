@@ -89,28 +89,35 @@ if "messages" not in st.session_state:
 # --- 사이드바: 파일 업로드 + 형식 진단 ---
 with st.sidebar:
     st.header("문서 업로드")
-    uploaded = st.file_uploader(
-        "PDF, TXT, DOCX, HWP, HWPX, 이미지 파일을 올려주세요.",
+    uploaded_files = st.file_uploader(
+        "PDF, TXT, DOCX, HWP, HWPX, 이미지 파일을 올려주세요. (여러 개 선택 가능)",
         type=SUPPORTED_EXTENSIONS,
+        accept_multiple_files=True,
     )
 
-    if uploaded is None:
-        # 파일을 내리면 이전 진단 결과도 비운다.
-        st.session_state.pop("ingest_id", None)
-        st.session_state.pop("ingest_result", None)
-        st.session_state.pop("ingest_saved", None)
+    # 파일별 진단 결과 캐시 (file_id -> {result, saved}).
+    # Streamlit 은 상호작용마다 스크립트를 재실행하므로, 이미 처리한 파일을
+    # 다시 파싱·저장(CSV 중복 행)하지 않도록 세션에 캐시해 둔다.
+    if "ingest_cache" not in st.session_state:
+        st.session_state.ingest_cache = {}
+
+    if not uploaded_files:
+        # 모든 파일을 내리면 이전 진단 캐시도 비운다.
+        st.session_state.ingest_cache = {}
     else:
-        # 같은 파일은 다시 파싱/저장하지 않는다.
-        # (Streamlit 은 상호작용마다 스크립트를 재실행하므로 캐시가 필요하다.)
-        file_id = (uploaded.name, uploaded.size)
-        if st.session_state.get("ingest_id") != file_id:
+        # 1) 아직 처리하지 않은 파일만 골라 진단·저장한다.
+        for uploaded in uploaded_files:
+            file_id = (uploaded.name, uploaded.size)
+            if file_id in st.session_state.ingest_cache:
+                continue
             result = ingest_file(uploaded)
             saved_path = save_report(result["records"])
             # 추출 본문을 디스크 저장소에 적재해 Chunking 단계가 읽을 수 있게 한다.
             save_text_store(result["records"])
-            st.session_state.ingest_id = file_id
-            st.session_state.ingest_result = result
-            st.session_state.ingest_saved = saved_path
+            st.session_state.ingest_cache[file_id] = {
+                "result": result,
+                "saved": saved_path,
+            }
 
             # 진단 결과를 서버 콘솔에도 기록한다.
             total_len = sum(r["text_length"] for r in result["records"])
@@ -122,42 +129,47 @@ with st.sidebar:
                 saved_path,
             )
 
-        result = st.session_state.ingest_result
-        records = result["records"]
-        document_text = result["text"]
+        # 2) 현재 올라온 파일들을 파일별로 묶어서 보여준다.
+        st.caption(f"업로드된 문서 {len(uploaded_files)}개")
+        last_saved = None
+        for uploaded in uploaded_files:
+            cached = st.session_state.ingest_cache[(uploaded.name, uploaded.size)]
+            result = cached["result"]
+            last_saved = cached["saved"]
+            records = result["records"]
+            document_text = result["text"]
 
-        file_format = records[0]["file_type"]
-        total_len = len(document_text)
-        doc_tokens = count_tokens(document_text)
+            file_format = records[0]["file_type"]
+            total_len = len(document_text)
+            doc_tokens = count_tokens(document_text)
 
-        # 1) 파일명 + 형식
-        st.write(f"**파일명:** {uploaded.name}")
-        st.write(f"**형식:** {file_format}")
-        # 2) 추출 텍스트 길이 + 예상 토큰 수
-        st.write(f"**추출된 텍스트 길이:** {total_len:,} 글자")
-        st.write(f"**예상 토큰 수:** {doc_tokens:,} tokens")
+            with st.expander(f"{uploaded.name} · {file_format}"):
+                # 1) 추출 텍스트 길이 + 예상 토큰 수
+                st.write(f"**추출된 텍스트 길이:** {total_len:,} 글자")
+                st.write(f"**예상 토큰 수:** {doc_tokens:,} tokens")
 
-        # 3) warning 이 있으면 눈에 띄게 표시한다 (레코드별로 모아서).
-        warnings = sorted({r["warning"] for r in records if r["warning"]})
-        for w in warnings:
-            st.warning(w)
-        if any(r["scanned"] for r in records):
-            st.info("일부 페이지가 스캔본(이미지)으로 의심됩니다.")
+                # 2) warning 이 있으면 눈에 띄게 표시한다 (레코드별로 모아서).
+                warnings = sorted({r["warning"] for r in records if r["warning"]})
+                for w in warnings:
+                    st.warning(w)
+                if any(r["scanned"] for r in records):
+                    st.info("일부 페이지가 스캔본(이미지)으로 의심됩니다.")
 
-        # 4) content_preview 를 접어서 볼 수 있게 한다.
-        with st.expander("추출 내용 미리보기 / 진단 상세"):
-            for r in records:
-                st.markdown(
-                    f"**page {r['page']}** · {r['parser_type']} · "
-                    f"{r['text_length']:,}자 · scanned={r['scanned']}"
-                )
-                if r["content_preview"]:
-                    st.text(r["content_preview"])
-                else:
-                    st.caption("(추출된 텍스트 없음)")
+                # 3) content_preview 를 페이지별로 보여준다.
+                st.markdown("**추출 내용 미리보기 / 진단 상세**")
+                for r in records:
+                    st.markdown(
+                        f"**page {r['page']}** · {r['parser_type']} · "
+                        f"{r['text_length']:,}자 · scanned={r['scanned']}"
+                    )
+                    if r["content_preview"]:
+                        st.text(r["content_preview"])
+                    else:
+                        st.caption("(추출된 텍스트 없음)")
 
-        # 5) CSV 저장 여부를 알린다.
-        st.success(f"진단 결과 저장: {st.session_state.ingest_saved}")
+        # 3) CSV 저장 위치를 알린다.
+        if last_saved:
+            st.success(f"진단 결과 저장: {last_saved}")
 
 # --- Readiness Gate (RAG 투입 가능 여부 판정) ---
 
