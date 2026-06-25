@@ -96,12 +96,12 @@ def _render_diagnosis():
                 if any(r["scanned"] for r in records):
                     st.info("일부 페이지가 스캔본(이미지)으로 의심됩니다.")
 
-                # 텍스트가 없고 Vision 이 필요한 파일이면, 그 자리에서 Vision 추출 버튼 제공.
-                needs_vision = (
-                    "data" in cached
-                    and any("Vision" in (r["warning"] or "") for r in records)
-                )
-                if needs_vision and st.button(
+                # 텍스트가 없고 Vision 이 필요한 파일이면 그 자리에서 추출할 수 있게 한다.
+                needs_vision = any("Vision" in (r["warning"] or "") for r in records)
+                if needs_vision and "data" not in cached:
+                    # 원본 bytes 가 없는 경우(예전 세션에 업로드됨) → 다시 올리면 버튼이 나타난다.
+                    st.info("이 파일을 사이드바에서 **다시 업로드**하면 Vision 추출 버튼이 나타납니다.")
+                elif needs_vision and st.button(
                     "🖼 OpenAI Vision 으로 텍스트 추출 (비용 발생)", key=f"vision_{name}"
                 ):
                     try:
