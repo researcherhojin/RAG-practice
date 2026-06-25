@@ -18,6 +18,10 @@ import fitz  # PyMuPDF
 import pymupdf4llm
 from docx import Document
 
+# 살짝 손상된 PDF(예: dict 키 오류)에서 MuPDF 가 stderr 로 쏟아내는 경고를 끈다.
+# 추출은 그대로 진행되며, 콘솔 노이즈("MuPDF error: ...")만 사라진다.
+fitz.TOOLS.mupdf_display_errors(False)
+
 # 업로드 허용 확장자 (Streamlit file_uploader 의 type= 에 그대로 넘긴다)
 SUPPORTED_EXTENSIONS = [
     "pdf", "txt", "docx", "hwp", "hwpx",
@@ -38,6 +42,9 @@ MIN_TEXT_PER_PAGE = 50
 
 # content_preview 에 담을 앞부분 글자 수
 PREVIEW_CHARS = 300
+
+# HWPX(zip) 압축 해제 시 누적 허용 크기 — 압축 폭탄(zip bomb) 방어용 상한.
+MAX_HWPX_DECOMPRESSED = 50 * 1024 * 1024  # 50MB
 
 # 추출된 본문 전체를 (source, page) 단위로 저장하는 사이드카 경로.
 # 진단 CSV 에는 preview 만 남기고, 다음 단계(Chunking)가 본문을 읽도록 별도 저장한다.
@@ -101,8 +108,19 @@ def _ingest_pdf(data: bytes, source: str):
 
 
 def _ingest_txt(data: bytes, source: str):
-    """TXT: 파일 내용을 그대로(UTF-8) 읽는다."""
-    text = data.decode("utf-8")
+    """TXT: UTF-8 우선, 실패 시 한국어 인코딩(cp949/euc-kr) 폴백.
+
+    한글 txt 는 CP949(EUC-KR) 인 경우가 많아 UTF-8 만 시도하면 무음 손실된다.
+    """
+    for enc in ("utf-8", "cp949", "euc-kr"):
+        try:
+            text = data.decode(enc)
+            break
+        except UnicodeDecodeError:
+            continue
+    else:
+        # 어떤 인코딩으로도 깔끔히 못 읽으면 깨진 글자는 대체해서라도 본문을 살린다.
+        text = data.decode("utf-8", errors="replace")
     return [_make_record(source, "TXT", "plain-text", 1, text)], text
 
 
@@ -139,6 +157,14 @@ def _ingest_hwpx(data: bytes, source: str):
                 return [_make_record(
                     source, "HWPX", "none", 1, "",
                     warning="HWPX 구조 확인 필요",
+                )], ""
+
+            # 압축 폭탄 방어: 압축 해제 누적 크기가 상한을 넘으면 거기서 멈춘다.
+            total = sum(zf.getinfo(name).file_size for name in section_files)
+            if total > MAX_HWPX_DECOMPRESSED:
+                return [_make_record(
+                    source, "HWPX", "none", 1, "",
+                    warning="HWPX 가 너무 큽니다 (압축 해제 상한 초과)",
                 )], ""
 
             parts = []
