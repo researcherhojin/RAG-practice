@@ -45,19 +45,25 @@ def _render_query_form():
 
         eval_questions = load_eval_questions()
         q_options = ["(직접 입력)"] + [f"{q['id']}: {q['question']}" for q in eval_questions]
-        picked = st.selectbox("질문", q_options)
 
-        if picked == "(직접 입력)":
-            # 문서 기반 예시 질문 생성 (인덱싱된 Chunk 표본 기반)
-            if st.button("📝 문서 기반 예시 질문 생성"):
+        # 문서 기반 예시 질문 생성 (현재 인덱싱된 문서 기반 — 동적, 드롭다운과 별개)
+        with st.expander("📝 현재 문서 기반 예시 질문 생성", expanded=True):
+            st.caption("아래 '질문' 드롭다운은 eval/questions.yaml 의 **고정** 평가 질문입니다. "
+                       "이 버튼은 지금 인덱싱된 문서로 예시 질문을 **새로** 만듭니다.")
+            if st.button("예시 질문 생성"):
                 with st.spinner("예시 질문 생성 중..."):
                     st.session_state.suggested_questions = generate_sample_questions(MODEL)
                 if not st.session_state.suggested_questions:
                     st.info("예시 질문을 생성할 근거(Chunk)가 없습니다. 먼저 Vector DB 를 만드세요.")
             for i, sq in enumerate(st.session_state.get("suggested_questions", [])):
-                # 추천 질문을 누르면 아래 입력칸에 채워진다.
+                # 추천 질문을 누르면 직접 입력 모드로 전환되고 입력칸에 채워진다.
                 if st.button(sq, key=f"suggested_{i}"):
+                    st.session_state.q_pick = "(직접 입력)"
                     st.session_state.manual_query = sq
+
+        picked = st.selectbox("질문", q_options, key="q_pick")
+
+        if picked == "(직접 입력)":
             query = st.text_input("질문 직접 입력", key="manual_query")
             expected_source = st.text_input(
                 "expected_source (선택 — 비우면 Retrieval Hit 은 N 으로 기록)",
