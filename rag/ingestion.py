@@ -230,15 +230,19 @@ def _ingest_image(data: bytes, source: str, ext: str, use_vision: bool = False):
 
 
 def ingest_file(file, use_vision: bool = False) -> dict:
-    """업로드 파일을 진단·추출한다.
+    """업로드 파일을 읽어 진단·추출한다 (ingest_bytes 래퍼)."""
+    file.seek(0)  # 재실행에 대비해 읽기 위치를 처음으로.
+    return ingest_bytes(file.read(), file.name, use_vision=use_vision)
+
+
+def ingest_bytes(data: bytes, source: str, use_vision: bool = False) -> dict:
+    """파일 bytes 를 진단·추출한다.
 
     use_vision=True 면 이미지·스캔 PDF 페이지에 OpenAI Vision 을 적용한다(비용 발생).
+    raw bytes 를 받으므로 업로드 후 '다시 Vision 으로 추출' 에도 재사용할 수 있다.
     반환: {"records": [record, ...], "text": "추출된 전체 텍스트"}
     """
-    source = file.name
     ext = source.rsplit(".", 1)[-1].lower() if "." in source else ""
-    file.seek(0)  # 재실행(예: Vision 토글)에 대비해 읽기 위치를 처음으로.
-    data = file.read()  # 업로드 파일 전체를 bytes 로 읽는다.
 
     try:
         if ext == "pdf":

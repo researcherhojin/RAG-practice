@@ -13,7 +13,7 @@ from rag.chunking import (
     summarize_chunks,
 )
 from rag.index import build_index, check_chunk_report, clear_collection, save_vector_db_report
-from rag.ingestion import save_report, save_text_store
+from rag.ingestion import ingest_bytes, save_report, save_text_store
 from rag.readiness import evaluate_report, save_readiness, summarize
 from ui.config import logger
 from ui.helpers import count_tokens, index_vs_upload
@@ -95,6 +95,29 @@ def _render_diagnosis():
                     st.warning(w)
                 if any(r["scanned"] for r in records):
                     st.info("일부 페이지가 스캔본(이미지)으로 의심됩니다.")
+
+                # 텍스트가 없고 Vision 이 필요한 파일이면, 그 자리에서 Vision 추출 버튼 제공.
+                needs_vision = (
+                    "data" in cached
+                    and any("Vision" in (r["warning"] or "") for r in records)
+                )
+                if needs_vision and st.button(
+                    "🖼 OpenAI Vision 으로 텍스트 추출 (비용 발생)", key=f"vision_{name}"
+                ):
+                    try:
+                        with st.spinner("Vision 으로 텍스트 추출 중..."):
+                            new_result = ingest_bytes(cached["data"], cached["name"], use_vision=True)
+                        cached["result"] = new_result
+                        cached["saved"] = save_report(new_result["records"])
+                        save_text_store(new_result["records"])
+                        logger.info("VISION_INGEST | file=%s chars=%d",
+                                    name, len(new_result["text"]))
+                    except Exception as e:
+                        logger.error("Vision 추출 실패: %s", e)
+                        st.error("Vision 추출 중 오류가 발생했습니다. .env 의 API Key 와 네트워크를 확인하세요.")
+                    else:
+                        st.rerun()
+
                 st.dataframe(
                     [
                         {"page": r["page"], "parser": r["parser_type"],

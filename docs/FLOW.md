@@ -156,8 +156,9 @@
   테마는 `.streamlit/config.toml`(라이트 미니멀).
 - **편의 기능**: `② 검색` 탭의 직접 입력 모드에서 `rag/question_gen.py` 로 **인덱싱된 Chunk 기반
   예시 질문**을 생성해, 클릭하면 질문 입력칸에 채워진다(실제 답변 가능한 질문 위주).
-- **Vision 추출(`rag/vision.py`)**: 사이드바 체크 시 이미지·스캔 PDF 페이지를 PNG 로 렌더해
-  OpenAI Vision 으로 본문을 추출한다(호출당 비용 → 스캔 PDF 는 문서당 최대 20페이지 상한).
+- **Vision 추출(`rag/vision.py`)**: 이미지·스캔본은 업로드 시 텍스트가 없어 경고로 표시되고,
+  `① 문서 준비` 탭 진단 카드의 **"Vision 으로 텍스트 추출" 버튼**을 누르면 PNG 로 렌더해
+  OpenAI Vision 으로 본문을 추출한다(보관한 raw bytes 재사용, 호출당 비용 → 스캔 PDF 문서당 20페이지 상한).
 - **인덱스/업로드 일치 가드**: Vector DB(chroma)·`outputs/` 는 세션 간 누적되므로, 인덱스에
   현재 업로드하지 않은 문서가 섞이면(`retriever.collection_sources`) 경고하고, `① 문서 준비` 탭에서
   **현재 업로드 문서만으로 재인덱싱**(누적 산출물 비우고 recreate)할 수 있다.
