@@ -156,6 +156,8 @@
   테마는 `.streamlit/config.toml`(라이트 미니멀).
 - **편의 기능**: `② 검색` 탭의 직접 입력 모드에서 `rag/question_gen.py` 로 **인덱싱된 Chunk 기반
   예시 질문**을 생성해, 클릭하면 질문 입력칸에 채워진다(실제 답변 가능한 질문 위주).
+- **Vision 추출(`rag/vision.py`)**: 사이드바 체크 시 이미지·스캔 PDF 페이지를 PNG 로 렌더해
+  OpenAI Vision 으로 본문을 추출한다(호출당 비용 → 스캔 PDF 는 문서당 최대 20페이지 상한).
 - **인덱스/업로드 일치 가드**: Vector DB(chroma)·`outputs/` 는 세션 간 누적되므로, 인덱스에
   현재 업로드하지 않은 문서가 섞이면(`retriever.collection_sources`) 경고하고, `① 문서 준비` 탭에서
   **현재 업로드 문서만으로 재인덱싱**(누적 산출물 비우고 recreate)할 수 있다.
@@ -164,5 +166,5 @@
   (이미 처리한 파일은 file_id 로 건너뜀 — 여러 파일을 올려도 같은 행이 두 번 쌓이지 않음).
 - **보안**: API Key 는 `.env` 만, `chroma_db/`·`outputs/`·`.env` 는 Git 제외,
   검색 Context 는 데이터로만 취급.
-- **다음 단계 (미구현)**: LangGraph Workflow(조건 분기·재검색 루프로 파이프라인 확장) ·
-  Vision/OCR 확장(이미지·스캔 PDF 본문 추출).
+- **다음 단계 (미구현)**: LangGraph Workflow — 조건 분기·재검색 루프(self-correcting RAG)로
+  파이프라인 확장. (Vision/OCR 은 `rag/vision.py` 로 구현 완료.)
