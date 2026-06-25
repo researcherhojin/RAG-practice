@@ -4,7 +4,7 @@
 탭 기반 UI로 바꾼 과정을 **요청 → 작업 → 결과** 순으로 단계별 정리한 문서입니다.
 이후 진행 방향을 정하기 위한 참고용입니다.
 
-> 관련 문서: 파이프라인 단계는 [FLOW.md](../FLOW.md), 전체 개요는 [README.md](../README.md).
+> 관련 문서: 파이프라인 단계는 [FLOW.md](FLOW.md), 전체 개요는 [README.md](../README.md).
 
 ---
 
@@ -139,7 +139,7 @@
 
 ### 기능 로드맵 (FLOW "다음 단계")
 - [ ] **LangGraph Workflow**: 조건 분기·재검색 루프로 파이프라인 확장.
-- [ ] **Vision/OCR**: 이미지·스캔 PDF 본문 추출(현재 "OCR 필요" 경고만).
+- [x] **Vision/OCR**: 이미지·스캔 PDF 본문 추출 — `rag/vision.py`(OpenAI Vision) 로 구현 완료.
 
 ### UX 추가 개선 아이디어
 - [ ] 빈 상태(empty state) 안내 일관화, 진행 단계 시각화(① → ② → ③ 흐름 힌트).

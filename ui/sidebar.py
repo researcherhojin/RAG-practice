@@ -18,15 +18,18 @@ def render_sidebar():
             accept_multiple_files=True,
             label_visibility="collapsed",
         )
+        # 이미지·스캔 PDF 에 OpenAI Vision 적용 (호출당 비용 발생 → 기본 OFF).
+        use_vision = st.checkbox("🖼 이미지·스캔 PDF 에 OpenAI Vision 적용 (비용 발생)")
 
         if not uploaded_files:
             st.session_state.ingest_cache = {}
         else:
             for uploaded in uploaded_files:
-                file_id = (uploaded.name, uploaded.size)
+                # Vision 토글을 캐시 키에 포함 → 켜고 끄면 다시 추출한다.
+                file_id = (uploaded.name, uploaded.size, use_vision)
                 if file_id in st.session_state.ingest_cache:
                     continue
-                result = ingest_file(uploaded)
+                result = ingest_file(uploaded, use_vision=use_vision)
                 saved_path = save_report(result["records"])
                 save_text_store(result["records"])
                 st.session_state.ingest_cache[file_id] = {"result": result, "saved": saved_path}

@@ -18,6 +18,8 @@ import fitz  # PyMuPDF
 import pymupdf4llm
 from docx import Document
 
+from rag import vision
+
 # 살짝 손상된 PDF(예: dict 키 오류)에서 MuPDF 가 stderr 로 쏟아내는 경고를 끈다.
 # 추출은 그대로 진행되며, 콘솔 노이즈("MuPDF error: ...")만 사라진다.
 fitz.TOOLS.mupdf_display_errors(False)
@@ -87,22 +89,36 @@ def _make_record(source, file_type, parser_type, page, text,
 # ---------------------------------------------------------------------------
 
 
-def _ingest_pdf(data: bytes, source: str):
-    """PDF: PyMuPDF4LLM 으로 페이지별 Markdown 추출을 시도한다."""
+def _ingest_pdf(data: bytes, source: str, use_vision: bool = False):
+    """PDF: PyMuPDF4LLM 으로 페이지별 Markdown 추출.
+
+    use_vision=True 면 스캔 의심 페이지(텍스트 거의 없음)를 이미지로 렌더해
+    OpenAI Vision 으로 본문을 추출한다 (문서당 MAX_VISION_PAGES 페이지까지).
+    """
     records = []
     texts = []
-    # 메모리상의 bytes 를 그대로 열어 임시 파일을 만들지 않는다.
     doc = fitz.open(stream=data, filetype="pdf")
     pages = pymupdf4llm.to_markdown(doc, page_chunks=True, show_progress=False)
+    vision_used = 0
     for i, chunk in enumerate(pages, start=1):
         page_text = chunk.get("text", "") or ""
-        texts.append(page_text)
-        # 페이지 글자 수가 너무 적으면 스캔본(OCR 필요)으로 의심한다.
         scanned = len(page_text.strip()) < MIN_TEXT_PER_PAGE
+        parser = "pymupdf4llm"
+
+        # 스캔 의심 페이지에 Vision 적용 (비용 상한 내에서).
+        if scanned and use_vision and vision_used < vision.MAX_VISION_PAGES:
+            png = doc[i - 1].get_pixmap(dpi=150).tobytes("png")
+            vtext = vision.extract_text(png)
+            vision_used += 1
+            if vtext:
+                page_text = vtext
+                parser = "openai-vision"
+                scanned = False
+
         warning = "OCR 또는 Vision 필요 가능성" if scanned else ""
+        texts.append(page_text)
         records.append(_make_record(
-            source, "PDF", "pymupdf4llm", i, page_text,
-            scanned=scanned, warning=warning,
+            source, "PDF", parser, i, page_text, scanned=scanned, warning=warning,
         ))
     return records, "\n\n".join(texts)
 
@@ -189,8 +205,18 @@ def _ingest_hwpx(data: bytes, source: str):
         )], ""
 
 
-def _ingest_image(data: bytes, source: str, ext: str):
-    """이미지: 텍스트 추출을 시도하지 않고 OCR/Vision 필요만 알린다."""
+def _ingest_image(data: bytes, source: str, ext: str, use_vision: bool = False):
+    """이미지: use_vision 이면 OpenAI Vision 으로 텍스트 추출, 아니면 경고만."""
+    if use_vision:
+        try:
+            # 어떤 이미지 형식이든 PNG 로 변환해 호환성을 확보한다.
+            png = fitz.Pixmap(data).tobytes("png")
+            text = vision.extract_text(png)
+        except Exception:
+            text = ""
+        if text:
+            return [_make_record(source, ext.upper(), "openai-vision", 1, text)], text
+
     record = _make_record(
         source, ext.upper(), "none", 1, "",
         warning="OCR 또는 Vision 필요",
@@ -203,18 +229,20 @@ def _ingest_image(data: bytes, source: str, ext: str):
 # ---------------------------------------------------------------------------
 
 
-def ingest_file(file) -> dict:
+def ingest_file(file, use_vision: bool = False) -> dict:
     """업로드 파일을 진단·추출한다.
 
+    use_vision=True 면 이미지·스캔 PDF 페이지에 OpenAI Vision 을 적용한다(비용 발생).
     반환: {"records": [record, ...], "text": "추출된 전체 텍스트"}
     """
     source = file.name
     ext = source.rsplit(".", 1)[-1].lower() if "." in source else ""
+    file.seek(0)  # 재실행(예: Vision 토글)에 대비해 읽기 위치를 처음으로.
     data = file.read()  # 업로드 파일 전체를 bytes 로 읽는다.
 
     try:
         if ext == "pdf":
-            records, text = _ingest_pdf(data, source)
+            records, text = _ingest_pdf(data, source, use_vision=use_vision)
         elif ext == "txt":
             records, text = _ingest_txt(data, source)
         elif ext == "docx":
@@ -224,7 +252,7 @@ def ingest_file(file) -> dict:
         elif ext == "hwpx":
             records, text = _ingest_hwpx(data, source)
         elif ext in IMAGE_EXTENSIONS:
-            records, text = _ingest_image(data, source, ext)
+            records, text = _ingest_image(data, source, ext, use_vision=use_vision)
         else:
             records = [_make_record(
                 source, ext.upper() or "UNKNOWN", "none", 1, "",

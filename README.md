@@ -15,7 +15,7 @@ RAG 답변(Source Citation) → 평가 → 검색 전략 고도화**까지, RAG 
 ![PyMuPDF4LLM](https://img.shields.io/badge/PyMuPDF4LLM-1.27.2.3-007ACC)
 ![tiktoken](https://img.shields.io/badge/tiktoken-0.13.0-10A37F)
 
-> 자세한 단계별 구현 흐름은 [FLOW.md](FLOW.md) 참고.
+> 자세한 단계별 구현 흐름은 [docs/FLOW.md](docs/FLOW.md) 참고.
 
 ---
 
@@ -111,6 +111,7 @@ flowchart TD
 | `rag/evaluation.py` | Hit·Citation 자동 점검 + Grounding 기록 | eval 질문 + 답변 → `evaluation_report.csv` |
 | `rag/retrieval_advanced.py` | Query Rewriting · Hybrid · Reranker 전략 | `chroma_db/` + `chunk_report.csv` → `retrieval_experiments.csv` |
 | `rag/question_gen.py` | 문서 기반 예시 질문 생성 | `chunk_report.csv` → 추천 질문 목록 |
+| `rag/vision.py` | OpenAI Vision 으로 이미지·스캔 페이지 텍스트 추출 | 이미지 → 텍스트 |
 
 ## 검색 전략 (Phase 9)
 
@@ -127,12 +128,15 @@ flowchart TD
 
 | 형식 | 처리 | 파서 |
 |---|---|---|
-| PDF | 페이지별 Markdown 추출, 스캔본 감지 | PyMuPDF4LLM |
-| TXT | UTF-8 그대로 | plain |
+| PDF | 페이지별 Markdown 추출, 스캔 페이지는 Vision 옵션 | PyMuPDF4LLM (+ OpenAI Vision) |
+| TXT | UTF-8 우선, 한글은 cp949/euc-kr 폴백 | plain |
 | DOCX | 문단 텍스트 | python-docx |
 | HWP | 추출 안 함 → "변환 권장" 경고 | — |
 | HWPX | zip XML best-effort | — |
-| 이미지(png/jpg 등) | 추출 안 함 → "OCR/Vision 필요" 경고 | — |
+| 이미지(png/jpg 등) | Vision 옵션 시 텍스트 추출, 아니면 경고 | OpenAI Vision |
+
+> 사이드바의 **"🖼 이미지·스캔 PDF 에 OpenAI Vision 적용"** 체크 시 이미지·스캔 페이지를
+> OpenAI Vision 으로 추출합니다(호출당 비용 발생, 스캔 PDF 는 문서당 최대 20페이지).
 
 ## 핵심 설정
 
@@ -229,17 +233,19 @@ rag-lab/
 │   ├── answer.py               # Phase 7 · RAG 답변 + Citation
 │   ├── evaluation.py           # Phase 8 · 평가 루프
 │   ├── retrieval_advanced.py   # Phase 9 · 검색 전략 고도화
-│   └── question_gen.py         # 문서 기반 예시 질문 생성
+│   ├── question_gen.py         # 문서 기반 예시 질문 생성
+│   └── vision.py               # OpenAI Vision 이미지·스캔 추출
 ├── .streamlit/config.toml      # 테마(라이트 미니멀) · 업로드 상한
 ├── eval/questions.yaml         # 평가 질문 5개
 ├── outputs/                    # 단계별 산출물 (git 제외)
 ├── chroma_db/                  # Vector DB (git 제외)
 ├── .tiktoken_cache/            # tiktoken 인코더 캐시 (git 제외)
-├── FLOW.md                     # 단계별 구현 흐름
+├── docs/                       # 문서 (FLOW.md · UI_REDESIGN.md · images/)
 └── README.md
 ```
 
 ## 다음 단계 (미구현)
 
-- **LangGraph Workflow** — 조건 분기·재검색 루프로 파이프라인 확장
-- **Vision/OCR 확장** — 이미지·스캔 PDF 본문 추출
+- **LangGraph Workflow** — 조건 분기·재검색 루프(self-correcting RAG)로 파이프라인 확장
+
+> Vision/OCR(이미지·스캔 PDF 본문 추출)은 `rag/vision.py` 로 구현 완료(OpenAI Vision).
