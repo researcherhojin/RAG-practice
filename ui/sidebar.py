@@ -3,7 +3,7 @@
 
 import streamlit as st
 
-from rag.ingestion import SUPPORTED_EXTENSIONS, ingest_file, save_report, save_text_store
+from rag.ingestion import SUPPORTED_EXTENSIONS, ingest_bytes, save_report, save_text_store
 from rag.retriever import collection_count
 from ui.config import MODEL, logger
 
@@ -18,21 +18,23 @@ def render_sidebar():
             accept_multiple_files=True,
             label_visibility="collapsed",
         )
-        # 이미지·스캔 PDF 에 OpenAI Vision 적용 (호출당 비용 발생 → 기본 OFF).
-        use_vision = st.checkbox("🖼 이미지·스캔 PDF 에 OpenAI Vision 적용 (비용 발생)")
+        st.caption("이미지·스캔본은 업로드 후 '문서 준비' 탭에서 Vision 으로 추출할 수 있습니다.")
 
         if not uploaded_files:
             st.session_state.ingest_cache = {}
         else:
             for uploaded in uploaded_files:
-                # Vision 토글을 캐시 키에 포함 → 켜고 끄면 다시 추출한다.
-                file_id = (uploaded.name, uploaded.size, use_vision)
+                file_id = (uploaded.name, uploaded.size)
                 if file_id in st.session_state.ingest_cache:
                     continue
-                result = ingest_file(uploaded, use_vision=use_vision)
+                data = uploaded.getvalue()  # raw bytes 를 보관 → 나중에 Vision 재추출용.
+                result = ingest_bytes(data, uploaded.name)  # 업로드 시엔 Vision 미적용(무료·빠름).
                 saved_path = save_report(result["records"])
                 save_text_store(result["records"])
-                st.session_state.ingest_cache[file_id] = {"result": result, "saved": saved_path}
+                st.session_state.ingest_cache[file_id] = {
+                    "result": result, "saved": saved_path,
+                    "data": data, "name": uploaded.name,
+                }
                 total_len = sum(r["text_length"] for r in result["records"])
                 logger.info(
                     "INGEST | file=%s pages=%d chars=%d -> %s",
