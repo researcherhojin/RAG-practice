@@ -13,6 +13,7 @@
 
 import csv
 import os
+from collections import Counter
 
 import chromadb
 import yaml
@@ -51,6 +52,19 @@ def collection_count(persist_dir=CHROMA_PATH, collection_name=COLLECTION_NAME) -
         return client.get_collection(collection_name).count()
     except Exception:
         return 0
+
+
+def collection_sources(persist_dir=CHROMA_PATH, collection_name=COLLECTION_NAME) -> dict:
+    """인덱스에 들어있는 문서별 chunk 개수 {source: count} 를 돌려준다. 없으면 빈 dict.
+
+    인덱스(chroma)가 업로드와 섞였는지(이전 세션 누적) 점검하는 UI 용.
+    """
+    try:
+        client = chromadb.PersistentClient(path=persist_dir)
+        got = client.get_collection(collection_name).get(include=["metadatas"])
+        return dict(Counter(m.get("source", "") for m in got["metadatas"]))
+    except Exception:
+        return {}
 
 
 def search(query, k=DEFAULT_K,

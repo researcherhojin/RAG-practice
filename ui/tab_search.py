@@ -17,6 +17,7 @@ from rag.question_gen import generate_sample_questions
 from rag.retrieval_advanced import STRATEGIES, run_retrieval, save_retrieval_experiment
 from rag.retriever import DEFAULT_K, collection_count
 from ui.config import MODEL, logger
+from ui.helpers import index_vs_upload
 from ui.styles import answer_box, preview_box, section
 
 
@@ -24,6 +25,14 @@ def render_search():
     if collection_count() == 0:
         st.info("Vector DB 가 비어 있습니다. '문서 준비' 탭에서 Vector DB 를 먼저 생성하세요.")
         return
+
+    # 인덱스에 지금 업로드하지 않은 문서가 섞여 있으면 알린다 (검색 결과 혼동 방지).
+    _, _, extra = index_vs_upload()
+    if extra:
+        st.warning(
+            "⚠ 인덱스에 지금 업로드하지 않은 문서(" + ", ".join(sorted(extra))
+            + ")가 포함되어 함께 검색됩니다. '문서 준비' 탭에서 현재 문서만으로 다시 인덱싱할 수 있습니다."
+        )
 
     _render_query_form()
 

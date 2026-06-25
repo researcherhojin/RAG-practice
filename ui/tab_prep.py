@@ -1,6 +1,8 @@
 # ui/tab_prep.py
 # ① 문서 준비 탭 — 진단 → Readiness → Chunking → Vector DB 인덱싱 (Phase 2~5).
 
+import os
+
 import streamlit as st
 
 from rag.chunking import (
@@ -11,10 +13,53 @@ from rag.chunking import (
     summarize_chunks,
 )
 from rag.index import build_index, check_chunk_report, save_vector_db_report
+from rag.ingestion import save_report, save_text_store
 from rag.readiness import evaluate_report, save_readiness, summarize
 from ui.config import logger
-from ui.helpers import count_tokens
+from ui.helpers import count_tokens, index_vs_upload
 from ui.styles import preview_box, section
+
+# 현재 업로드 문서로 재인덱싱할 때 비우는 누적 산출물.
+_PIPELINE_OUTPUTS = [
+    "outputs/ingestion_report.csv", "outputs/extracted_text.json",
+    "outputs/readiness_report.csv", "outputs/chunk_report.csv",
+    "outputs/vector_db_report.csv",
+]
+
+
+def _rebuild_from_current_uploads():
+    """누적 산출물·인덱스를 비우고, 지금 업로드된 문서만으로 파이프라인을 다시 돌린다.
+
+    반환: build_index 요약 dict (chunk 가 없으면 None).
+    """
+    cache = st.session_state.ingest_cache
+    # 1) 이전 세션 누적분 제거
+    for f in _PIPELINE_OUTPUTS:
+        if os.path.exists(f):
+            os.remove(f)
+    # 2) 현재 업로드 파일의 진단·본문만 다시 기록 (캐시에 이미 추출 결과가 있음)
+    for cached in cache.values():
+        records = cached["result"]["records"]
+        save_report(records)
+        save_text_store(records)
+    # 3) readiness → chunking → index(recreate)
+    rec = evaluate_report()
+    saved = save_readiness(rec)
+    st.session_state.readiness = {"records": rec, "counts": summarize(rec), "saved": saved}
+    chunks = chunk_documents()
+    if not chunks:
+        st.session_state.pop("chunks", None)
+        return None
+    saved = save_chunk_report(chunks)
+    st.session_state.chunks = {
+        "chunks": chunks, "stats": summarize_chunks(chunks), "saved": saved,
+        "params": (DEFAULT_CHUNK_SIZE, DEFAULT_CHUNK_OVERLAP),
+    }
+    summary = build_index(recreate=True)
+    summary["saved"] = save_vector_db_report(summary["report_rows"])
+    st.session_state.indexing = summary
+    logger.info("REINDEX | sources=%d count=%d", len(cache), summary["count"])
+    return summary
 
 
 def render_prep():
@@ -198,13 +243,37 @@ def _render_indexing():
                     st.session_state.pop("indexing", None)
 
         indexing = st.session_state.get("indexing")
-        if not indexing:
-            return
-        c1, c2, c3 = st.columns(3)
-        c1.metric("읽은 Chunk", indexing["read"])
-        c2.metric("저장된 Chunk", indexing["indexed"])
-        c3.metric("collection 총 개수", indexing["count"])
-        st.caption(
-            f"모델 `{indexing['model']}` · collection `{indexing['collection']}` · "
-            f"저장 `{indexing['path']}/` · 리포트 `{indexing['saved']}`"
-        )
+        if indexing:
+            c1, c2, c3 = st.columns(3)
+            c1.metric("읽은 Chunk", indexing["read"])
+            c2.metric("저장된 Chunk", indexing["indexed"])
+            c3.metric("collection 총 개수", indexing["count"])
+            st.caption(
+                f"모델 `{indexing['model']}` · collection `{indexing['collection']}` · "
+                f"저장 `{indexing['path']}/` · 리포트 `{indexing['saved']}`"
+            )
+
+        # --- 인덱스 ↔ 업로드 일치 점검 (이전 세션 누적 혼동 방지) ---
+        indexed, uploaded, extra = index_vs_upload()
+        if indexed:
+            st.divider()
+            st.markdown("**현재 인덱스에 있는 문서**")
+            for s, n in indexed.items():
+                st.caption(f"• {s} — {n} chunks")
+            if extra:
+                st.warning(
+                    "인덱스에 지금 업로드하지 않은 문서가 있습니다: "
+                    + ", ".join(sorted(extra))
+                    + ".\n검색·답변이 이 문서까지 포함합니다 (이전 세션에 인덱싱된 문서가 남아 있음)."
+                )
+                if st.button("현재 업로드 문서만으로 다시 인덱싱", type="primary"):
+                    if not st.session_state.ingest_cache:
+                        st.warning("현재 업로드된 문서가 없습니다. 사이드바에서 문서를 올린 뒤 다시 시도하세요.")
+                    else:
+                        with st.spinner("현재 업로드 문서로 인덱스를 다시 만드는 중..."):
+                            summary = _rebuild_from_current_uploads()
+                        if summary:
+                            st.success(f"재인덱싱 완료 — {summary['count']} chunk (현재 업로드 문서만)")
+                            st.rerun()
+                        else:
+                            st.warning("인덱싱할 Chunk 가 없습니다. 업로드한 문서가 Ready/Partial 인지 확인하세요.")
