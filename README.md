@@ -26,7 +26,7 @@ flowchart TD
     U["문서 업로드 (여러 개)<br/>PDF·TXT·DOCX·HWP·HWPX·이미지"] --> ING
 
     subgraph P2["Phase 2 · Ingestion"]
-        ING["형식 진단 + 텍스트 추출"] --> ICSV[("ingestion_report.csv")]
+        ING["형식 진단 + 텍스트 추출<br/>이미지·스캔 PDF 는 OpenAI Vision 옵션"] --> ICSV[("ingestion_report.csv")]
         ING --> TXT[("extracted_text.json")]
     end
 
@@ -67,10 +67,27 @@ flowchart TD
     subgraph P9["Phase 9 · Retrieval 고도화"]
         ADV["Query Rewriting · Hybrid · Reranker 전략 비교"] --> XCSV[("retrieval_experiments.csv")]
     end
+    ADV --> ANS
+
+    U -. 대조군 .-> BASE["Phase 1 · Baseline<br/>검색 없이 문서 전체를 Prompt 에"]
 ```
 
 - **[1] Baseline Q&A** — 검색 없이 문서 전체를 Prompt 에 넣는 Long Context 대조군(③ 탭).
 - **[2]~[9] 구현 완료.** Phase 6·7·8·9 는 `② 검색·답변·평가` 탭에서 한 흐름으로 제공됩니다.
+
+### 흐름 한눈에 보기 (처음 보는 분께)
+
+RAG는 LLM이 문서를 **외우는** 게 아니라, 질문이 들어올 때마다 **관련 부분만 찾아 참고해 답하는** 방식입니다.
+
+1. **문서 업로드** → 글자를 뽑아냅니다(진단). 스캔본·이미지라 글자가 없으면 **OpenAI Vision**으로 읽습니다.
+2. **Readiness** — 이 문서가 검색에 쓸 만한지(Ready/Partial/Blocked) 판정합니다. 못 쓰는 건 거릅니다.
+3. **Chunking** — 검색하기 좋게 문서를 작은 조각으로 자르고, 각 조각에 출처(파일·페이지)를 붙입니다.
+4. **Indexing** — 각 조각을 의미 좌표(임베딩)로 바꿔 **Vector DB**에 넣습니다.
+5. **검색** — 질문을 같은 좌표로 바꿔, 의미가 가까운 조각 **Top-K개**를 찾습니다. (전략: 기본/질문재작성/하이브리드/재정렬)
+6. **답변** — 찾은 조각**만** 근거로 LLM이 답하고, 문장마다 `[#1]` 같은 **출처 표시**를 답니다.
+7. **평가** — 답이 실제 근거에 맞는지(환각 아닌지) 자동 점검 + 사람이 직접 라벨링해 기록합니다.
+
+> **Baseline(③ 탭)** 은 검색 없이 문서 전체를 통째로 Prompt 에 넣는 옛 방식으로, RAG와 비교하는 대조군입니다.
 
 ## 화면 구성 (상단 탭 3개)
 
@@ -150,6 +167,32 @@ flowchart TD
 | 토크나이저 | tiktoken `o200k_base` (첫 사용 시 `.tiktoken_cache/` 에 캐시 → 이후 오프라인 동작) | `rag/chunking.py` |
 | Top-K | 기본 4 (UI 조정) | `rag/retriever.py` |
 | 테마 | 라이트 미니멀 | `.streamlit/config.toml` |
+
+## 비용 (OpenAI API)
+
+모든 LLM·임베딩·Vision 호출은 **OpenAI API** 를 씁니다. 단가는 **2026-06 기준**이며,
+최신가는 [OpenAI 공식 가격표](https://openai.com/api/pricing/) 를 확인하세요(자주 바뀝니다).
+
+| 모델 | 쓰이는 곳 | 단가 (1M tokens) |
+|---|---|---|
+| `text-embedding-3-small` | 인덱싱·검색 임베딩 | $0.02 |
+| `gpt-5.4-mini` | RAG/Baseline 답변 · 질문 재작성 · Reranker · 예시 질문 · **Vision** | 입력 $0.75 / 출력 $4.50 |
+
+**작업별 호출 구조** (호출 1회 = 비용 1회):
+
+| 작업 | 호출 | 비용 드라이버 |
+|---|---|---|
+| Vector DB 인덱싱 | 임베딩 1회(배치) | 전체 Chunk 토큰 수 |
+| 검색 | 임베딩 1회 | 질문 토큰(작음) |
+| RAG 답변 | chat 1회 | 입력 = Top-K Chunk + 질문, 출력 = 답변 |
+| Query Rewriting / Reranker / 예시 질문 | 각 chat 1회 | 후보·질문 토큰 |
+| **Vision OCR** | 이미지·스캔 페이지당 chat 1회 | 이미지 토큰 + 출력 |
+
+> **주의**: Vision 은 이미지/페이지당 호출이라 **스캔 PDF 가 길면 비용이 누적**됩니다.
+> 그래서 기본 OFF + 문서당 최대 20페이지(`rag/vision.py` 의 `MAX_VISION_PAGES`) 로 제한합니다.
+> 대략의 비용 감: 짧은 RAG 답변 1건(컨텍스트 ~2K 토큰 + 답변 ~0.3K)은 1센트 미만입니다.
+
+> 출처: [OpenAI API Pricing](https://openai.com/api/pricing/) · [CloudZero OpenAI Pricing 2026](https://www.cloudzero.com/blog/openai-pricing/)
 
 ---
 

@@ -79,9 +79,11 @@ def _render_diagnosis():
         if not cache:
             st.info("왼쪽 사이드바에서 문서를 업로드하면 진단 결과가 여기 표시됩니다.")
             return
-        for (name, _size), cached in cache.items():
+        for cached in cache.values():
             records = cached["result"]["records"]
             document_text = cached["result"]["text"]
+            # 파일명은 캐시 키가 아니라 record 에서 읽는다(키 구조 변경에 안전).
+            name = records[0]["source"]
             file_format = records[0]["file_type"]
             doc_tokens = count_tokens(document_text)
 

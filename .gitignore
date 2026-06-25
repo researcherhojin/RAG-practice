@@ -31,3 +31,16 @@ eval/questions.yaml
 .env.*
 *.key
 *.pem
+
+# Streamlit 비밀 (config.toml 은 커밋하되 secrets 는 절대 금지)
+.streamlit/secrets.toml
+
+# IDE / 에디터
+.vscode/
+.idea/
+
+# 로그 / 테스트 캐시
+*.log
+.pytest_cache/
+.coverage
+htmlcov/
