@@ -55,7 +55,7 @@ flowchart TD
 
     RET --> ANS
     subgraph P7["Phase 7 · RAG Answer"]
-        ANS["Context 구성 → LLM 답변 → [#n] Citation"] --> ACSV[("rag_answers.csv")]
+        ANS["Context 구성 → LLM 답변 → Source Citation"] --> ACSV[("rag_answers.csv")]
     end
 
     ANS --> EVAL
@@ -84,18 +84,16 @@ flowchart TD
 
 ## 스크린샷
 
-> 아래 스크린샷은 **공개 샘플 문서**(AI 에이전트 아키텍처 논문) 기준이며,
-> **상단 탭 UI 도입 이전** 화면입니다(레이아웃이 현재와 다를 수 있음).
+> **공개 샘플 문서**(AI 에이전트 아키텍처 논문) 기준의 현재 탭 UI 입니다.
 > 개인 문서를 인덱싱해 다시 캡처할 경우 본문·파일명이 노출될 수 있으니
 > `docs/images/` 에 덮어쓴 뒤 커밋하지 마세요.
 
-| 전체 화면 | Readiness 판정 |
+| ① 문서 준비 (진단 → Readiness → Chunking → 인덱싱) | ② 검색 · 답변 · 평가 |
 |---|---|
-| ![전체 화면](docs/images/01-overview.png) | ![Readiness](docs/images/02-readiness.png) |
+| ![문서 준비](docs/images/after-01-prep.png) | ![검색·답변·평가](docs/images/after-02-search.png) |
 
-| Chunking 결과 | 검색 결과 |
-|---|---|
-| ![Chunking](docs/images/03-chunking.png) | ![Retrieval](docs/images/04-retrieval.png) |
+> 기존 단일 스크롤 UI → 탭 기반 UI 로의 Before/After 비교는
+> [docs/UI_REDESIGN.md](docs/UI_REDESIGN.md) 참고.
 
 ## 기능 모듈 (`rag/`)
 
