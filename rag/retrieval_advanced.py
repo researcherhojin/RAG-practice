@@ -15,6 +15,7 @@
 #   유지하고 rank 를 1..n 으로 다시 매긴다. 그래야 답변 생성의 [#n] Citation 이 맞는다.
 
 import csv
+import logging
 import os
 import re
 
@@ -24,6 +25,8 @@ from openai import OpenAI
 from rag.retriever import PREVIEW_CHARS, search
 
 load_dotenv()
+
+logger = logging.getLogger("rag-lab")
 
 # 검색 전략 키 → 화면 라벨 (app.py selectbox 에서 사용).
 STRATEGIES = [
@@ -64,8 +67,9 @@ def rewrite_query(query, model) -> str:
         )
         rewritten = (response.choices[0].message.content or "").strip()
         return rewritten or query
-    except Exception:
+    except Exception as e:
         # 재작성 실패 시 원본 질문으로 검색 (검색 자체는 계속 가능하게).
+        logger.warning("query 재작성 실패, 원본 사용: %s", e)
         return query
 
 
@@ -85,17 +89,20 @@ def keyword_search(query, chunk_report_path="outputs/chunk_report.csv", top_k=4)
         for row in csv.DictReader(f):
             text = row.get("text", "") or ""
             text_lower = text.lower()
-            hits = sum(text_lower.count(tok) for tok in tokens)
+            # 단어 경계 매칭 — "ai" 가 "rain" 안에서 잡히는 과다 카운트 방지.
+            hits = sum(len(re.findall(rf"\b{re.escape(tok)}\b", text_lower)) for tok in tokens)
             if hits > 0:
-                scored.append((hits, row, text))
+                # 길이 편향 보정 — 긴 chunk 가 단순히 길어서 유리해지지 않도록 정규화.
+                score = hits / (len(text) ** 0.5)
+                scored.append((score, row, text))
 
-    # 매칭 수 내림차순 → 상위 top_k.
+    # 점수 내림차순 → 상위 top_k.
     scored.sort(key=lambda x: x[0], reverse=True)
     rows = []
-    for i, (hits, row, text) in enumerate(scored[:top_k]):
+    for i, (score, row, text) in enumerate(scored[:top_k]):
         rows.append({
             "rank": i + 1,
-            "score": hits,                       # 키워드 매칭 수 (Vector score 와 척도 다름)
+            "score": round(score, 4),            # 길이 정규화 키워드 점수 (Vector score 와 척도 다름)
             "source": row.get("source", ""),
             "file_type": row.get("file_type", ""),
             "parser_type": row.get("parser_type", ""),
@@ -142,7 +149,8 @@ def rerank_with_llm(query, rows, model, top_n=4) -> list:
 
     # 후보를 번호 매겨 제시 (토큰 절약 위해 preview 길이만 사용).
     listing = "\n".join(
-        f"[{r['rank']}] (source: {r['source']} · chunk_id: {r['chunk_id']})\n{r['text'][:PREVIEW_CHARS]}"
+        f"[{r['rank']}] (source: {r['source']} · chunk_id: {r['chunk_id']})\n"
+        f"{(r.get('text') or '')[:PREVIEW_CHARS]}"
         for r in rows
     )
     try:
@@ -158,7 +166,8 @@ def rerank_with_llm(query, rows, model, top_n=4) -> list:
         )
         raw = response.choices[0].message.content or ""
         order = [int(n) for n in re.findall(r"\d+", raw)]
-    except Exception:
+    except Exception as e:
+        logger.warning("Reranker 실패, 원래 순서 유지: %s", e)
         order = []
 
     # 원래 rank 로 row 를 찾기 위한 맵.

@@ -12,7 +12,7 @@ from rag.chunking import (
     save_chunk_report,
     summarize_chunks,
 )
-from rag.index import build_index, check_chunk_report, save_vector_db_report
+from rag.index import build_index, check_chunk_report, clear_collection, save_vector_db_report
 from rag.ingestion import save_report, save_text_store
 from rag.readiness import evaluate_report, save_readiness, summarize
 from ui.config import logger
@@ -48,7 +48,10 @@ def _rebuild_from_current_uploads():
     st.session_state.readiness = {"records": rec, "counts": summarize(rec), "saved": saved}
     chunks = chunk_documents()
     if not chunks:
+        # 현재 업로드가 0 chunk(전부 Blocked 등)면 인덱스를 비워 stale 문서를 제거한다.
+        clear_collection()
         st.session_state.pop("chunks", None)
+        st.session_state.pop("indexing", None)
         return None
     saved = save_chunk_report(chunks)
     st.session_state.chunks = {
@@ -239,7 +242,8 @@ def _render_indexing():
                         summary["model"], summary["collection"], saved_path,
                     )
                 except Exception as e:
-                    st.error(f"Vector DB 생성 중 오류가 발생했습니다: {e}")
+                    logger.error("Vector DB 생성 실패: %s", e)
+                    st.error("Vector DB 생성 중 오류가 발생했습니다. .env 의 API Key 와 네트워크를 확인하세요.")
                     st.session_state.pop("indexing", None)
 
         indexing = st.session_state.get("indexing")
@@ -270,10 +274,15 @@ def _render_indexing():
                     if not st.session_state.ingest_cache:
                         st.warning("현재 업로드된 문서가 없습니다. 사이드바에서 문서를 올린 뒤 다시 시도하세요.")
                     else:
-                        with st.spinner("현재 업로드 문서로 인덱스를 다시 만드는 중..."):
-                            summary = _rebuild_from_current_uploads()
-                        if summary:
-                            st.success(f"재인덱싱 완료 — {summary['count']} chunk (현재 업로드 문서만)")
-                            st.rerun()
+                        try:
+                            with st.spinner("현재 업로드 문서로 인덱스를 다시 만드는 중..."):
+                                summary = _rebuild_from_current_uploads()
+                        except Exception as e:
+                            logger.error("재인덱싱 실패: %s", e)
+                            st.error("재인덱싱 중 오류가 발생했습니다. 잠시 후 다시 시도하거나 로그를 확인하세요.")
                         else:
-                            st.warning("인덱싱할 Chunk 가 없습니다. 업로드한 문서가 Ready/Partial 인지 확인하세요.")
+                            if summary:
+                                st.success(f"재인덱싱 완료 — {summary['count']} chunk (현재 업로드 문서만)")
+                            else:
+                                st.info("현재 업로드 문서로는 인덱싱할 Chunk 가 없어 인덱스를 비웠습니다.")
+                            st.rerun()

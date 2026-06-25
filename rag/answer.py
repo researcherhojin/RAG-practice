@@ -105,7 +105,9 @@ def generate_answer(query, rows, model) -> dict:
     answer = response.choices[0].message.content or ""
 
     # 답변이 인용한 번호([#n])를 rank 가 일치하는 row 로 되짚는다.
-    numbers = extract_citation_numbers(answer)
+    # LLM 이 범위 밖 번호(예: 4개뿐인데 [#7])를 쓰면 근거 없는 인용이므로 버린다.
+    valid_ranks = {r["rank"] for r in rows}
+    numbers = [n for n in extract_citation_numbers(answer) if n in valid_ranks]
     citations = [r for r in rows if r["rank"] in numbers]
 
     return {

@@ -8,12 +8,16 @@
 #   (Streamlit 에 의존하지 않는 순수 로직만 둔다 — 화면은 ui/ 담당)
 
 import csv
+import logging
 import os
+import re
 
 from dotenv import load_dotenv
 from openai import OpenAI
 
 load_dotenv()
+
+logger = logging.getLogger("rag-lab")
 
 # 질문 생성에 쓸 Chunk 표본 수 / Chunk 당 글자 상한 (토큰 절약).
 SAMPLE_CHUNKS = 8
@@ -70,13 +74,15 @@ def generate_sample_questions(model, n=5, chunk_report_path="outputs/chunk_repor
             ],
         )
         raw = response.choices[0].message.content or ""
-    except Exception:
+    except Exception as e:
+        logger.warning("예시 질문 생성 실패: %s", e)
         return []
 
-    # 줄 단위로 나눠 앞쪽 번호/기호("1.", "-", "•")를 떼고 정리한다.
+    # 줄 단위로 나눠 앞쪽 목록 기호(예: "1.", "2)", "- ", "• ")만 한 번 떼어낸다.
+    # lstrip(문자집합) 은 "5G 요금제?" 의 "5" 까지 지우므로 정규식으로 prefix 1개만 제거.
     questions = []
     for line in raw.splitlines():
-        q = line.strip().lstrip("0123456789.-•) ").strip()
+        q = re.sub(r"^\s*(?:\d+[.)]|[-*•])\s*", "", line.strip()).strip()
         if q and q not in questions:
             questions.append(q)
     return questions[:n]

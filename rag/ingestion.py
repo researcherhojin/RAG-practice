@@ -108,8 +108,19 @@ def _ingest_pdf(data: bytes, source: str):
 
 
 def _ingest_txt(data: bytes, source: str):
-    """TXT: 파일 내용을 그대로(UTF-8) 읽는다."""
-    text = data.decode("utf-8")
+    """TXT: UTF-8 우선, 실패 시 한국어 인코딩(cp949/euc-kr) 폴백.
+
+    한글 txt 는 CP949(EUC-KR) 인 경우가 많아 UTF-8 만 시도하면 무음 손실된다.
+    """
+    for enc in ("utf-8", "cp949", "euc-kr"):
+        try:
+            text = data.decode(enc)
+            break
+        except UnicodeDecodeError:
+            continue
+    else:
+        # 어떤 인코딩으로도 깔끔히 못 읽으면 깨진 글자는 대체해서라도 본문을 살린다.
+        text = data.decode("utf-8", errors="replace")
     return [_make_record(source, "TXT", "plain-text", 1, text)], text
 
 

@@ -96,6 +96,14 @@ def _coerce_metadata(row: dict) -> dict:
     return meta
 
 
+def clear_collection(persist_dir=CHROMA_PATH, collection_name=COLLECTION_NAME):
+    """collection 을 통째로 삭제한다 (현재 업로드가 0 chunk 일 때 인덱스를 비우는 용도)."""
+    try:
+        chromadb.PersistentClient(path=persist_dir).delete_collection(collection_name)
+    except Exception:
+        pass  # 아직 없으면 무시.
+
+
 def build_index(recreate=False,
                 chunk_report_path="outputs/chunk_report.csv",
                 persist_dir=CHROMA_PATH,

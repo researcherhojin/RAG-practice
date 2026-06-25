@@ -44,16 +44,26 @@ def render_baseline():
 def _answer(document_text: str, question: str) -> str:
     try:
         user_prompt = f"[문서 내용]\n{document_text}\n\n[질문]\n{question}"
-        response = get_client().chat.completions.create(
-            model=MODEL,
-            messages=[
-                {"role": "system", "content": _SYSTEM_PROMPT},
-                {"role": "user", "content": user_prompt},
-            ],
-        )
-        answer = response.choices[0].message.content
-        st.markdown(answer)
-        usage = response.usage
+        with st.spinner("답변 생성 중..."):
+            response = get_client().chat.completions.create(
+                model=MODEL,
+                messages=[
+                    {"role": "system", "content": _SYSTEM_PROMPT},
+                    {"role": "user", "content": user_prompt},
+                ],
+            )
+    except Exception as e:
+        # API 호출 자체가 실패한 경우에만 오류로 처리한다.
+        logger.error("Baseline 답변 실패: %s", e)
+        answer = "답변을 생성하는 중 오류가 발생했습니다. 잠시 후 다시 시도하거나 API Key 설정을 확인해주세요."
+        st.error(answer)
+        return answer
+
+    # 호출은 성공 — 답변을 먼저 확정·표시하고, usage 로깅은 있을 때만 한다.
+    answer = response.choices[0].message.content or ""
+    st.markdown(answer)
+    usage = response.usage
+    if usage:
         logger.info(
             "CHAT | model=%s prompt_tokens=%d completion_tokens=%d total_tokens=%d",
             MODEL, usage.prompt_tokens, usage.completion_tokens, usage.total_tokens,
@@ -62,11 +72,4 @@ def _answer(document_text: str, question: str) -> str:
             f"이번 답변 토큰: prompt {usage.prompt_tokens:,} · "
             f"completion {usage.completion_tokens:,} · total {usage.total_tokens:,}"
         )
-        return answer
-    except Exception:
-        answer = (
-            "답변을 생성하는 중 오류가 발생했습니다. "
-            "잠시 후 다시 시도하거나 API Key 설정을 확인해주세요."
-        )
-        st.error(answer)
-        return answer
+    return answer

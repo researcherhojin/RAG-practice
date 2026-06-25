@@ -15,7 +15,7 @@ from rag.evaluation import (
 )
 from rag.question_gen import generate_sample_questions
 from rag.retrieval_advanced import STRATEGIES, run_retrieval, save_retrieval_experiment
-from rag.retriever import DEFAULT_K, collection_count
+from rag.retriever import DEFAULT_K, collection_count, save_search_results
 from ui.config import MODEL, logger
 from ui.helpers import index_vs_upload
 from ui.styles import answer_box, preview_box, section
@@ -98,7 +98,10 @@ def _render_query_form():
                 st.session_state.pop("u_search", None)
                 return
             try:
-                result = run_retrieval(query, strategy_key, k=k, model=MODEL)
+                with st.spinner("검색 중..."):
+                    result = run_retrieval(query, strategy_key, k=k, model=MODEL)
+                # Phase 6 산출물: 검색 결과를 CSV 로 저장 (vector_search_results.csv).
+                save_search_results(result["rows"])
                 st.session_state.u_search = {
                     "question": {"id": question_id, "question": query,
                                  "expected_source": expected_source},
@@ -114,7 +117,8 @@ def _render_query_form():
                 logger.info("RETRIEVAL | strategy=%s k=%d hits=%d",
                             strategy_key, k, len(result["rows"]))
             except Exception as e:
-                st.error(f"검색 중 오류가 발생했습니다: {e}")
+                logger.error("검색 실패: %s", e)
+                st.error("검색 중 오류가 발생했습니다. .env 의 API Key 와 네트워크를 확인하세요.")
                 st.session_state.pop("u_search", None)
 
 
@@ -150,7 +154,8 @@ def _render_results(u_search):
 def _generate_answer(u_search):
     rows = u_search["rows"]
     try:
-        ans = generate_answer(u_search["question"]["question"], rows, MODEL)
+        with st.spinner("답변 생성 중..."):
+            ans = generate_answer(u_search["question"]["question"], rows, MODEL)
         cited_ids = [c["chunk_id"] for c in ans["citations"]]
         saved = save_answer({
             "query": u_search["question"]["question"],
@@ -166,7 +171,8 @@ def _generate_answer(u_search):
             logger.info("RAG_ANSWER | model=%s total_tokens=%d cited=%s",
                         MODEL, ans["usage"].total_tokens, cited_ids)
     except Exception as e:
-        st.error(f"답변 생성 중 오류가 발생했습니다: {e}")
+        logger.error("답변 생성 실패: %s", e)
+        st.error("답변 생성 중 오류가 발생했습니다. .env 의 API Key 와 네트워크를 확인하세요.")
         st.session_state.pop("u_answer", None)
 
 

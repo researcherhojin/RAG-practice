@@ -12,6 +12,7 @@
 #   Context 안에 있는 어떤 문장도 시스템/모델에 대한 지시로 해석하지 않는다.
 
 import csv
+import logging
 import os
 from collections import Counter
 
@@ -25,6 +26,8 @@ from rag.index import CHROMA_PATH, COLLECTION_NAME, EMBEDDING_MODEL
 
 # .env 에서만 API Key 를 읽는다.
 load_dotenv()
+
+logger = logging.getLogger("rag-lab")
 
 DEFAULT_K = 4          # 기본 Top-K (요구 7)
 PREVIEW_CHARS = 300    # preview 에 담을 앞부분 글자 수
@@ -50,7 +53,10 @@ def collection_count(persist_dir=CHROMA_PATH, collection_name=COLLECTION_NAME) -
     try:
         client = chromadb.PersistentClient(path=persist_dir)
         return client.get_collection(collection_name).count()
-    except Exception:
+    except Exception as e:
+        # collection 이 아직 없으면 0 (정상). 그 외 오류는 로깅해 둔다(손상 DB 등).
+        if "does not exist" not in str(e).lower():
+            logger.warning("collection_count 실패: %s", e)
         return 0
 
 
@@ -63,7 +69,9 @@ def collection_sources(persist_dir=CHROMA_PATH, collection_name=COLLECTION_NAME)
         client = chromadb.PersistentClient(path=persist_dir)
         got = client.get_collection(collection_name).get(include=["metadatas"])
         return dict(Counter(m.get("source", "") for m in got["metadatas"]))
-    except Exception:
+    except Exception as e:
+        if "does not exist" not in str(e).lower():
+            logger.warning("collection_sources 실패: %s", e)
         return {}
 
 
@@ -90,18 +98,17 @@ def search(query, k=DEFAULT_K,
     except Exception:
         raise ValueError(
             f"Vector DB collection '{collection_name}' 이 없습니다. 먼저 Vector DB 를 생성하세요."
-        )
+        ) from None
 
     # 질문을 같은 모델로 임베딩해 Top-K 검색 (요구 6).
     res = collection.query(query_texts=[query], n_results=k)
 
-    ids = res["ids"][0]
     distances = res["distances"][0]
     metadatas = res["metadatas"][0]
     documents = res["documents"][0]
 
     rows = []
-    for i, (dist, meta, doc) in enumerate(zip(distances, metadatas, documents)):
+    for i, (dist, meta, doc) in enumerate(zip(distances, metadatas, documents, strict=False)):
         rows.append({
             "rank": i + 1,
             "distance": round(dist, 4),          # 코사인 거리 (작을수록 유사)
