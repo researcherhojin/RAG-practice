@@ -3,8 +3,8 @@
 #
 # 이 파일의 역할:
 #   사용자 질문을 Embedding 으로 바꿔 Chroma Vector DB(rag_docs)에서 Top-K Chunk 를
-#   검색하고, 그 결과(rank/distance/metadata/preview)를 돌려준다.
-#   (최종 RAG 답변 / Source Citation / Reranker / Hybrid Search 는 아직 구현 안 함.)
+#   검색하고, 그 결과(rank/distance/metadata/preview + 답변 생성용 전체 text)를 돌려준다.
+#   (RAG 답변 / Source Citation 은 Phase 7 rag/answer.py 담당. Reranker / Hybrid Search 는 아직 구현 안 함.)
 #   (Streamlit 에 의존하지 않는 순수 로직만 둔다 — 화면은 app.py 담당)
 #
 # 보안 주의:
@@ -99,6 +99,9 @@ def search(query, k=DEFAULT_K,
             "chunk_id": meta.get("chunk_id", ""),
             "warning": meta.get("warning", ""),
             "preview": (doc or "")[:PREVIEW_CHARS],
+            # Phase 7 답변 생성용 Chunk 전체 원문. CSV(SEARCH_RESULT_FIELDS)에는
+            # 담지 않고 화면/답변 생성에서만 사용한다 (CSV 컬럼 구조 유지).
+            "text": doc or "",
         })
     return rows
 
@@ -110,7 +113,11 @@ def save_search_results(rows, path="outputs/vector_search_results.csv") -> str:
     """
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=SEARCH_RESULT_FIELDS)
+        # extrasaction="ignore": row 에 새로 생긴 "text" 키는 CSV 에 쓰지 않는다.
+        # → vector_search_results.csv 컬럼 구조(SEARCH_RESULT_FIELDS)를 그대로 유지.
+        writer = csv.DictWriter(
+            f, fieldnames=SEARCH_RESULT_FIELDS, extrasaction="ignore",
+        )
         writer.writeheader()
         for row in rows:
             writer.writerow(row)
