@@ -285,6 +285,7 @@ rag-lab/
 ├── chroma_db/                  # Vector DB (git 제외)
 ├── .tiktoken_cache/            # tiktoken 인코더 캐시 (git 제외)
 ├── docs/                       # 문서 (FLOW.md · UI_REDESIGN.md · images/)
+├── logging.md                  # 작업 로그 (구현 단계 · 커밋/PR 타임라인)
 └── README.md
 ```
 

@@ -10,10 +10,11 @@ import streamlit as st
 
 _CSS = """
 <style>
-  /* Streamlit 기본 크롬 정리 (헤더 자체는 남겨 사이드바 토글 유지) */
+  /* Streamlit 기본 크롬 정리 (툴바 우측 액션만 숨기고, 사이드바 토글 버튼은 살림) */
   header[data-testid="stHeader"] {background: transparent;}
   #MainMenu, footer {visibility: hidden;}
-  [data-testid="stToolbar"] {display: none;}
+  [data-testid="stToolbarActions"] {display: none;}
+  [data-testid="stStatusWidget"] {display: none;}
 
   /* 본문 폭/여백 — 읽기 좋은 한 칼럼 */
   .block-container {max-width: 860px; padding-top: 2.2rem; padding-bottom: 5rem;}
